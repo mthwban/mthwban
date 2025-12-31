@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>البوابة الرقمية | القنصلية العامة للجمهورية الإسلامية الموريتانية بجدة</title>
+    <meta name="description" content="المنصة الإلكترونية الرسمية لخدمات القنصلية الموريتانية بجدة - حجز مواعيد، تجديد جوازات، وتتبع معاملات." />
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&display=swap" rel="stylesheet">
+    
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              mauritania: {
+                green: '#006233',
+                gold: '#FFD700',
+                red: '#d21628',
+                deep: '#002d18',
+                charcoal: '#121212'
+              }
+            },
+            fontFamily: { sans: ['Tajawal', 'sans-serif'] },
+            animation: {
+              'celebrate-bg': 'celebrateBG 15s ease infinite',
+              'float': 'float 6s ease-in-out infinite',
+              'marquee': 'marquee 30s linear infinite',
+              'confetti': 'confetti 5s ease-in-out forwards',
+              'scan': 'scan 2s ease-in-out infinite alternate',
+            },
+            keyframes: {
+              celebrateBG: {
+                '0%, 100%': { 'background-color': '#002d18' },
+                '33%': { 'background-color': '#004a26' },
+                '66%': { 'background-color': '#4a0b0b' },
+              },
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-20px)' },
+              },
+              marquee: {
+                '0%': { transform: 'translateX(0)' },
+                '100%': { transform: 'translateX(100%)' }
+              },
+              confetti: {
+                '0%': { transform: 'translateY(0) rotate(0deg)', opacity: 1 },
+                '100%': { transform: 'translateY(100vh) rotate(720deg)', opacity: 0 }
+              },
+              scan: {
+                '0%': { top: '0%' },
+                '100%': { top: '100%' }
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body { font-family: 'Tajawal', sans-serif; background-color: #121212; scroll-behavior: smooth; }
+      .celebration-bg {
+        background: linear-gradient(-45deg, #002d18, #006233, #d21628, #002d18);
+        background-size: 400% 400%;
+        animation: celebrationGradient 15s ease infinite;
+      }
+      @keyframes celebrationGradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+      .logo-glow { box-shadow: 0 0 40px rgba(255, 215, 0, 0.3); }
+      @media print { .no-print { display: none !important; } }
+      input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+    </style>
+
+    <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@19.2.3",
+    "react-dom/client": "https://esm.sh/react-dom@19.2.3/client",
+    "@google/genai": "https://esm.sh/@google/genai@1.34.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/"
+  }
+}
+</script>
+</head>
+<body class="celebration-bg text-gray-100 min-h-screen">
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef, useMemo } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { GoogleGenAI, Type, Modality } from '@google/genai';
+
+        // --- CONSTANTS ---
+        const ASSETS = {
+            seal: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Seal_of_Mauritania.svg/1024px-Seal_of_Mauritania.svg.png',
+            flag: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Flag_of_Mauritania.svg/1200px-Flag_of_Mauritania.svg.png',
+            heroBg: 'https://images.unsplash.com/photo-1582653280607-ee77ff289c02?q=80&w=1470&auto=format&fit=crop',
+            landscape: 'https://images.unsplash.com/photo-1571235962067-b52a11ad9c98?q=80&w=1470&auto=format&fit=crop'
+        };
+
+        const CONSULAR_SERVICES = [
+            { id: 'passport', titleAr: 'تجديد جواز السفر', titleEn: 'Passport Renewal', icon: 'fa-id-card', isAvailable: true },
+            { id: 'visa', titleAr: 'طلب تأشيرة دخول', titleEn: 'Visa Application', icon: 'fa-passport', isAvailable: true },
+            { id: 'notary', titleAr: 'التوثيقات والوكالات', titleEn: 'Notary & Power of Attorney', icon: 'fa-file-signature', isAvailable: true },
+            { id: 'civil', titleAr: 'الحالة المدنية', titleEn: 'Civil Status', icon: 'fa-users', isAvailable: true },
+        ];
+
+        const SERVICE_REQUIREMENTS = {
+            passport: { ar: ['أصل بطاقة التعريف الوطنية', 'جواز السفر القديم', '4 صور خلفية بيضاء', 'إقامة سارية'], en: ['National ID', 'Old Passport', '4 Photos', 'Valid Residence'] },
+            visa: { ar: ['جواز سفر ساري', 'دعوة رسمية', 'تأمين طبي', 'صورتين شخصيتين'], en: ['Valid Passport', 'Invitation', 'Medical Insurance', '2 Photos'] },
+            notary: { ar: ['أصل الهوية', 'حضور صاحب العلاقة', 'مسودة الوكالة'], en: ['Original ID', 'Personal Appearance', 'Draft POA'] },
+            civil: { ar: ['شهادة ميلاد', 'دفتر العائلة'], en: ['Birth Certificate', 'Family Book'] }
+        };
+
+        const AVAILABLE_TIME_SLOTS = ['09:00', '10:00', '11:00', '12:00', '13:00'];
+        const ADMIN_PASSWORD = 'rim-admin-2024';
+
+        // --- UTILS ---
+        const processImage = async (file) => {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.src = e.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX_SIZE = 1200;
+                        let w = img.width, h = img.height;
+                        if (w > h && w > MAX_SIZE) { h *= MAX_SIZE / w; w = MAX_SIZE; }
+                        else if (h > MAX_SIZE) { w *= MAX_SIZE / h; h = MAX_SIZE; }
+                        canvas.width = w; canvas.height = h;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, w, h);
+                        resolve(canvas.toDataURL('image/webp', 0.7));
+                    };
+                };
+            });
+        };
+
+        const getBookings = () => JSON.parse(localStorage.getItem('rim_bookings') || '[]');
+        const saveBooking = (b) => localStorage.setItem('rim_bookings', JSON.stringify([...getBookings(), b]));
+
+        // --- COMPONENTS ---
+
+        const IndependenceCelebration = ({ language }) => {
+            const [show, setShow] = useState(true);
+            useEffect(() => { const t = setTimeout(() => setShow(false), 10000); return () => clearTimeout(t); }, []);
+            return (
+                <>
+                    <div className="bg-gradient-to-r from-mauritania-green via-mauritania-red to-mauritania-green py-3 text-center text-white font-black text-sm md:text-lg shadow-2xl relative z-[100] border-b-2 border-mauritania-gold/30">
+                        <div className="flex items-center justify-center gap-4">
+                            <i className="fas fa-star text-mauritania-gold animate-pulse"></i>
+                            <p className="tracking-widest">{language === 'ar' ? 'نحتفل بذكرى عيد الاستقلال الموريتاني - 28 نوفمبر' : 'Celebrating Mauritanian Independence Day - November 28'}</p>
+                            <i className="fas fa-moon text-mauritania-gold animate-pulse"></i>
+                        </div>
+                    </div>
+                    {show && (
+                        <div className="fixed inset-0 pointer-events-none z-[200] overflow-hidden">
+                            {[...Array(50)].map((_, i) => (
+                                <div key={i} className="absolute animate-confetti" style={{
+                                    left: `${Math.random() * 100}%`, top: `-20px`,
+                                    backgroundColor: i % 2 === 0 ? '#006233' : '#FFD700',
+                                    width: `${Math.random() * 10 + 5}px`, height: `${Math.random() * 20 + 10}px`,
+                                    animationDuration: `${Math.random() * 3 + 4}s`, animationDelay: `${Math.random() * 2}s`
+                                }}></div>
+                            ))}
+                        </div>
+                    )}
+                </>
+            );
+        };
+
+        const Header = ({ language, toggleLanguage }) => (
+            <header className="sticky top-0 z-50 bg-mauritania-charcoal/80 backdrop-blur-xl border-b border-white/5 no-print">
+                <div className="flex h-1.5 w-full">
+                    <div className="flex-1 bg-mauritania-red"></div><div className="flex-1 bg-mauritania-gold"></div><div className="flex-1 bg-mauritania-green"></div><div className="flex-1 bg-mauritania-gold"></div><div className="flex-1 bg-mauritania-red"></div>
+                </div>
+                <div className="max-w-7xl mx-auto px-6 flex justify-between items-center h-24">
+                    <div className="flex items-center gap-4">
+                        <button onClick={toggleLanguage} className="px-4 py-2 rounded-xl border border-mauritania-gold/30 text-mauritania-gold font-bold text-xs hover:bg-mauritania-gold hover:text-mauritania-charcoal transition-all">
+                            {language === 'ar' ? 'English' : 'عربي'}
+                        </button>
+                    </div>
+                    <div className="text-center flex-1">
+                        <h1 className="text-sm md:text-xl font-black text-white uppercase tracking-tighter">
+                            {language === 'ar' ? 'القنصلية العامة للجمهورية الإسلامية الموريتانية' : 'Consulate General of Mauritania'}
+                        </h1>
+                        <p className="text-[10px] font-black text-mauritania-gold uppercase mt-1">{language === 'ar' ? 'جدة - المملكة العربية السعودية' : 'Jeddah - Saudi Arabia'}</p>
+                    </div>
+                    <div className="relative">
+                        <i className="fas fa-star absolute -top-2 -right-2 text-mauritania-gold animate-bounce"></i>
+                        <div className="h-16 w-16 md:h-20 md:w-20 bg-white rounded-full p-2 logo-glow">
+                            <img src={ASSETS.seal} alt="Seal" className="w-full h-full object-contain" />
+                        </div>
+                    </div>
+                </div>
+            </header>
+        );
+
+        const Hero = ({ language, onBook, onAbout, onTrack }) => (
+            <section className="relative min-h-[80vh] flex items-center justify-center overflow-hidden bg-mauritania-deep">
+                <img src={ASSETS.heroBg} className="absolute inset-0 w-full h-full object-cover opacity-20 scale-105" loading="lazy" />
+                <div className="absolute inset-0 bg-gradient-to-t from-mauritania-charcoal via-transparent to-transparent"></div>
+                <div className="relative z-10 text-center px-6 max-w-4xl">
+                    <div className="inline-block px-6 py-2 rounded-full bg-mauritania-gold text-mauritania-charcoal text-[10px] font-black mb-8 uppercase tracking-widest">
+                        {language === 'ar' ? 'البوابة القنصلية الرسمية' : 'Official Consular Gateway'}
+                    </div>
+                    <h2 className="text-5xl md:text-8xl font-black text-white mb-8 tracking-tighter leading-tight">
+                        {language === 'ar' ? 'نحو خدمات' : 'Towards Future'}<br/>
+                        <span className="text-mauritania-gold">{language === 'ar' ? 'دبلوماسية ذكية' : 'Digital Excellence'}</span>
+                    </h2>
+                    <div className="flex flex-wrap justify-center gap-6">
+                        <button onClick={onBook} className="bg-mauritania-green text-white px-10 py-5 rounded-[2rem] font-black text-xl shadow-2xl hover:bg-green-800 transition-all active:scale-95 flex items-center gap-3">
+                            {language === 'ar' ? 'حجز موعد' : 'Book Now'} <i className="fas fa-calendar-alt"></i>
+                        </button>
+                        <button onClick={onAbout} className="bg-white/5 backdrop-blur-xl text-white px-10 py-5 rounded-[2rem] font-black text-xl hover:bg-white/10 transition-all border border-white/10 flex items-center gap-3">
+                            {language === 'ar' ? 'عن القنصلية' : 'About Us'} <i className="fas fa-info-circle"></i>
+                        </button>
+                        <button onClick={onTrack} className="bg-white/5 backdrop-blur-xl text-white px-10 py-5 rounded-[2rem] font-black text-xl hover:bg-white/10 transition-all border border-white/10 flex items-center gap-3">
+                            {language === 'ar' ? 'تتبع الطلب' : 'Track Status'} <i className="fas fa-search"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+        );
+
+        const BookingSection = ({ language }) => {
+            const [form, setForm] = useState({ name: '', passportNumber: '', phone: '', email: '', service: 'passport', date: '', time: '' });
+            const [ocrLoading, setOcrLoading] = useState(false);
+            const [preview, setPreview] = useState(null);
+            const [done, setDone] = useState(null);
+
+            const handleFile = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                setOcrLoading(true);
+                const base64 = await processImage(file);
+                setPreview(base64);
+                try {
+                    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                    const res = await ai.models.generateContent({
+                        model: 'gemini-3-flash-preview',
+                        contents: { parts: [{ text: "Extract Name and Passport/ID Number from this image." }, { inlineData: { mimeType: 'image/webp', data: base64.split(',')[1] } }] },
+                        config: { responseMimeType: "application/json", responseSchema: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, passportNumber: { type: Type.STRING } }, required: ["name", "passportNumber"] } }
+                    });
+                    const data = JSON.parse(res.text);
+                    setForm(p => ({ ...p, name: data.name || p.name, passportNumber: data.passportNumber || p.passportNumber }));
+                } catch (err) { console.error(err); }
+                finally { setOcrLoading(false); }
+            };
+
+            const submit = (e) => {
+                e.preventDefault();
+                const id = 'RIM-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+                const b = { ...form, id, status: 'pending', createdAt: new Date().toISOString() };
+                saveBooking(b);
+                setDone(b);
+            };
+
+            if (done) return (
+                <div className="max-w-xl mx-auto p-12 bg-white rounded-[3rem] text-gray-900 text-center shadow-2xl">
+                    <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-8 text-4xl"><i className="fas fa-check"></i></div>
+                    <h3 className="text-3xl font-black mb-4">{language === 'ar' ? 'تم الحجز بنجاح' : 'Booking Successful'}</h3>
+                    <p className="font-bold text-gray-500 mb-8">{language === 'ar' ? 'رقم المرجع الخاص بك هو:' : 'Your Reference ID is:'} <span className="text-mauritania-green block text-4xl mt-2">#{done.id}</span></p>
+                    <button onClick={() => setDone(null)} className="bg-mauritania-green text-white px-8 py-3 rounded-xl font-black">{language === 'ar' ? 'حجز جديد' : 'New Booking'}</button>
+                </div>
+            );
+
+            return (
+                <div className="max-w-5xl mx-auto p-10 md:p-20 bg-white rounded-[4rem] shadow-2xl relative overflow-hidden text-gray-900">
+                    {ocrLoading && <div className="absolute inset-0 z-50 bg-black/60 flex flex-col items-center justify-center"><div className="w-64 h-80 border-2 border-mauritania-gold rounded-2xl relative overflow-hidden"><div className="absolute w-full h-1 bg-mauritania-gold animate-scan"></div></div><p className="text-white mt-6 font-black animate-pulse">Scanning Document...</p></div>}
+                    <h3 className="text-4xl font-black text-mauritania-green mb-12 text-center">{language === 'ar' ? 'بوابة المواعيد الرقمية' : 'Digital Booking Portal'}</h3>
+                    <form onSubmit={submit} className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {['name', 'passportNumber', 'phone', 'email'].map(f => (
+                            <div key={f}>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{f}</label>
+                                <input required value={form[f]} onChange={e => setForm({...form, [f]: e.target.value})} className="w-full p-5 rounded-2xl bg-gray-50 border-2 border-transparent focus:border-mauritania-green outline-none font-bold" />
+                            </div>
+                        ))}
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Date</label>
+                            <input required type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} className="w-full p-5 rounded-2xl bg-gray-50 border-2 border-transparent focus:border-mauritania-green outline-none font-bold" />
+                        </div>
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Time</label>
+                            <select required value={form.time} onChange={e => setForm({...form, time: e.target.value})} className="w-full p-5 rounded-2xl bg-gray-50 border-2 border-transparent focus:border-mauritania-green outline-none font-bold">
+                                <option value="">Select...</option>
+                                {AVAILABLE_TIME_SLOTS.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="flex flex-col items-center justify-center p-12 border-4 border-dashed border-gray-100 rounded-[2.5rem] cursor-pointer hover:bg-gray-50 transition-all">
+                                <i className="fas fa-magic text-4xl text-mauritania-gold mb-4"></i>
+                                <span className="font-black text-gray-400">Upload ID for Auto-Fill</span>
+                                <input type="file" className="hidden" accept="image/*" onChange={handleFile} />
+                            </label>
+                        </div>
+                        <button className="md:col-span-2 bg-mauritania-green text-white py-6 rounded-[2rem] font-black text-2xl shadow-xl">Complete Booking</button>
+                    </form>
+                </div>
+            );
+        };
+
+        const AIChat = ({ language }) => {
+            const [open, setOpen] = useState(false);
+            const [msgs, setMsgs] = useState([{ role: 'model', text: 'Welcome to the Smart Consular Assistant.' }]);
+            const [input, setInput] = useState('');
+            const [loading, setLoading] = useState(false);
+            const audioCtx = useRef(null);
+
+            const send = async () => {
+                if (!input.trim()) return;
+                const txt = input; setInput(''); setMsgs(p => [...p, { role: 'user', text: txt }]); setLoading(true);
+                try {
+                    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                    const res = await ai.models.generateContent({
+                        model: 'gemini-3-flash-preview',
+                        contents: txt,
+                        config: { systemInstruction: "You are the Diplomatic Assistant for the Mauritanian Consulate in Jeddah. Be professional and concise." }
+                    });
+                    setMsgs(p => [...p, { role: 'model', text: res.text }]);
+                } catch { setMsgs(p => [...p, { role: 'model', text: 'System busy.' }]); }
+                finally { setLoading(false); }
+            };
+
+            const tts = async (text) => {
+                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                const res = await ai.models.generateContent({
+                    model: "gemini-2.5-flash-preview-tts",
+                    contents: [{ parts: [{ text }] }],
+                    config: { responseModalities: [Modality.AUDIO], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } } }
+                });
+                const b64 = res.candidates[0].content.parts[0].inlineData.data;
+                if (!audioCtx.current) audioCtx.current = new AudioContext({ sampleRate: 24000 });
+                const ctx = audioCtx.current;
+                const bin = atob(b64);
+                const bytes = new Uint8Array(bin.length);
+                for(let i=0; i<bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                const pcm = new Int16Array(bytes.buffer);
+                const buf = ctx.createBuffer(1, pcm.length, 24000);
+                const data = buf.getChannelData(0);
+                for(let i=0; i<pcm.length; i++) data[i] = pcm[i]/32768;
+                const src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination); src.start();
+            };
+
+            return (
+                <div className="fixed bottom-8 right-8 z-[1000] flex flex-col items-end">
+                    {open && (
+                        <div className="mb-4 w-96 h-[500px] bg-white rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden text-gray-900 border border-gray-100 animate-fade-in">
+                            <div className="bg-mauritania-green p-6 text-white font-black flex justify-between items-center">
+                                <span>AI Diplomatic Assistant</span>
+                                <button onClick={() => setOpen(false)}><i className="fas fa-times"></i></button>
+                            </div>
+                            <div className="flex-grow p-6 overflow-y-auto space-y-4 bg-gray-50">
+                                {msgs.map((m, i) => (
+                                    <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`p-4 rounded-2xl max-w-[80%] text-sm font-bold ${m.role === 'user' ? 'bg-mauritania-green text-white' : 'bg-white border'}`}>
+                                            {m.text}
+                                            {m.role === 'model' && <button onClick={() => tts(m.text)} className="ml-2 opacity-50"><i className="fas fa-volume-up"></i></button>}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="p-4 border-t flex gap-2">
+                                <input value={input} onChange={e => setInput(e.target.value)} onKeyPress={e => e.key === 'Enter' && send()} className="flex-grow p-3 bg-gray-100 rounded-xl outline-none font-bold text-sm" placeholder="Ask anything..." />
+                                <button onClick={send} className="bg-mauritania-green text-white w-12 h-12 rounded-xl"><i className="fas fa-paper-plane"></i></button>
+                            </div>
+                        </div>
+                    )}
+                    <button onClick={() => setOpen(!open)} className="w-20 h-20 bg-mauritania-green text-white rounded-[2rem] shadow-2xl flex items-center justify-center text-3xl hover:scale-110 transition-all border-4 border-white/20">
+                        <i className={open ? "fas fa-times" : "fas fa-robot"}></i>
+                    </button>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [lang, setLang] = useState('ar');
+            const [view, setView] = useState('portal');
+
+            return (
+                <div className="flex flex-col min-h-screen">
+                    <IndependenceCelebration language={lang} />
+                    <Header language={lang} toggleLanguage={() => setLang(l => l === 'ar' ? 'en' : 'ar')} />
+                    
+                    <main className="flex-grow">
+                        {view === 'portal' && (
+                            <>
+                                <Hero language={lang} onBook={() => document.getElementById('book').scrollIntoView({behavior:'smooth'})} onAbout={() => setView('about')} onTrack={() => setView('track')} />
+                                <section id="book" className="py-24 bg-white/5 backdrop-blur-lg">
+                                    <BookingSection language={lang} />
+                                </section>
+                            </>
+                        )}
+                        {view === 'track' && (
+                            <div className="py-24 text-center">
+                                <button onClick={() => setView('portal')} className="mb-10 text-mauritania-gold font-black"><i className="fas fa-arrow-left"></i> Back</button>
+                                <h2 className="text-4xl font-black mb-10">Track Application</h2>
+                                <input placeholder="RIM-XXXXXX" className="p-6 rounded-2xl bg-white text-gray-900 font-black text-3xl text-center outline-none border-4 border-mauritania-gold uppercase tracking-widest" />
+                                <button className="block mx-auto mt-8 bg-mauritania-green px-12 py-4 rounded-xl font-black">Find Application</button>
+                            </div>
+                        )}
+                        {view === 'about' && (
+                            <div className="py-24 max-w-4xl mx-auto px-6">
+                                <button onClick={() => setView('portal')} className="mb-10 text-mauritania-gold font-black"><i className="fas fa-arrow-left"></i> Back</button>
+                                <h2 className="text-6xl font-black mb-12 text-mauritania-green">About the Consulate</h2>
+                                <p className="text-2xl font-bold leading-relaxed text-gray-300">The Consulate General of Mauritania in Jeddah serves as a vital bridge between the Mauritanian diaspora and the homeland, providing secure and efficient consular services in the Kingdom of Saudi Arabia.</p>
+                                <div className="mt-16 bg-white p-12 rounded-[3rem] text-gray-900 grid grid-cols-2 gap-8">
+                                    <div><p className="text-xs font-black text-gray-400">Capital</p><p className="text-2xl font-black">Nouakchott</p></div>
+                                    <div><p className="text-xs font-black text-gray-400">Currency</p><p className="text-2xl font-black">Ouguiya (MRU)</p></div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    <footer className="bg-mauritania-deep py-20 border-t-8 border-mauritania-gold px-6">
+                        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
+                            <div className="flex items-center gap-6">
+                                <img src={ASSETS.flag} className="h-10 rounded shadow-xl" />
+                                <p className="font-bold text-gray-500">© 2024 Mauritanian Consulate Jeddah. All rights reserved.</p>
+                            </div>
+                            <div className="flex gap-4">
+                                <button onClick={() => setView('about')} className="text-gray-400 hover:text-mauritania-gold font-bold">About Us</button>
+                                <button className="text-gray-400 hover:text-mauritania-gold font-bold">Privacy Policy</button>
+                            </div>
+                        </div>
+                    </footer>
+                    <AIChat language={lang} />
+                </div>
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

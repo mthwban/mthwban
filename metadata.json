@@ -1,0 +1,7 @@
+{
+  "name": "Mauritanian Consulate Portal - Jeddah",
+  "description": "The official digital gateway for Mauritanian citizens in Jeddah. Secure, fast, and intelligent consular services.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
